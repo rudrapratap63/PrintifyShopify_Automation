@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import sys
 import time
 import os
+from datetime import datetime
 
 directory = sys.argv[1]
 product_num = int(sys.argv[2])
@@ -31,6 +32,8 @@ print("All files deleted.")
 global imageCount
 imageCount = 0
 
+failed_downloads = []
+
 def download_image(image_data):
     global imageCount
     image_url, file_name = image_data
@@ -45,13 +48,19 @@ def download_image(image_data):
             image.save(f"{directory}/{file_name}", "JPEG")
             print(f"Success: {file_name}")
             imageCount += 1
-            return  # Exit the function if the download is successful
+            return
         except Exception as e:
+            if attempt == retries - 1:  # If this was the last attempt
+                failed_downloads.append({
+                    'file_name': file_name,
+                    'url': image_url,
+                    'error': str(e),
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
             if isinstance(e, ConnectionError) or isinstance(e, requests.exceptions.ConnectionError):
                 print(f"Retrying download for {file_name} (Attempt {attempt + 1}/{retries})")
                 time.sleep(retry_delay)
             else:
-                # print(f'FAILED - {file_name}: {e}')
                 print(f"Retrying download for {file_name} (Attempt {attempt + 1}/{retries})")
                 time.sleep(retry_delay)
 
@@ -83,6 +92,13 @@ with open('./printify_product_data.json') as f:
     data = json.load(f)
 
 process_product(data['data'][product_num])
+
+# Save failed downloads to a log file if any
+if failed_downloads:
+    log_filename = f"failed_downloads_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(log_filename, 'w') as f:
+        json.dump(failed_downloads, f, indent=2)
+    print(f"\nSome downloads failed. Check {log_filename} for details.")
 
 print("All Images download successfully ")
 print(f"Total {imageCount} images downloaded")

@@ -9,6 +9,7 @@ import threading
 import multiprocessing
 import queue
 import time
+from datetime import datetime
 
 load_dotenv()
 
@@ -30,6 +31,10 @@ headers = {
 # Read the JSON file once
 with open('./product_variants.json', 'r') as file:
     data = json.load(file)
+
+# Add failed uploads tracking
+failed_uploads = []
+failed_uploads_lock = threading.Lock()
 
 def extract_sku(file_name):
     pattern = r'__(\d+)__'
@@ -102,8 +107,22 @@ def process_file(file_name, file_path):
                     print(f"Image updated successfully. Count: {count}")
                 elif update_response.status_code == 409:
                     print("Error updating image:", update_response.status_code, update_response.text)
+                    with failed_uploads_lock:
+                        failed_uploads.append({
+                            'file_name': file_name,
+                            'product_id': product_id,
+                            'error': f"Status code: {update_response.status_code}",
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
                 else:
                     print("Error updating image:", update_response.status_code, update_response.text)
+                    with failed_uploads_lock:
+                        failed_uploads.append({
+                            'file_name': file_name,
+                            'product_id': product_id,
+                            'error': f"Status code: {update_response.status_code}",
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
                 break
             except requests.exceptions.RequestException as e:
                 retry_count += 1
@@ -113,6 +132,13 @@ def process_file(file_name, file_path):
                 retry_delay *= 2  # Exponential backoff
         else:
             print("Maximum retries reached. Unable to upload image.")
+            with failed_uploads_lock:
+                failed_uploads.append({
+                    'file_name': file_name,
+                    'product_id': product_id,
+                    'error': "Maximum retries reached",
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                })
     else:
         print(f"Invalid file name format: {file_name}")
 
@@ -145,6 +171,13 @@ if __name__ == "__main__":
 
     # Wait for the worker threads to finish
     file_queue.join()
+
+    # Save failed uploads to a log file
+    if failed_uploads:
+        log_filename = f"failed_uploads_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(log_filename, 'w') as f:
+            json.dump(failed_uploads, f, indent=2)
+        print(f"\nSome uploads failed. Check {log_filename} for details.")
 
     print("All files processed.")
     print(f"Total Image Uploaded is {count}")
