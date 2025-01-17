@@ -1,251 +1,269 @@
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, ttk, font as tkfont
 import subprocess
 import json
 import re
-from tkinter import ttk
-from tkinter import font as tkfont
+import os
 
-global containProductId
-containProductId = None 
-
-productArrayWant = ["iPhone Case - Illuminati Part",
-                    "iPhone Case - Illunminati Dark",
-                    "iPhone Case - Inspire Healthy Life Style",
-                    "iPhone Case - Jolly Office Culture",
-                    "iPhone Case - Loki",
-                    "iPhone Case - Love Nature Food",
-                    ]
-productArray = ["iPhone Case - Golden Vein White Marble",
-                    "iPhone Case - Greenish Marble",
-                    "iPhone Case - Hulk",
-                    "iPhone Case - I love you Mom",
-                    "iPhone Case - Illuminati Abstract",
-                    "iPhone Case - Illuminati Part",
-                    "iPhone Case - Illunminati Dark",
-                    "iPhone Case - Inspire Healthy Life Style",
-                    "iPhone Case - Jolly Office Culture",
-                    "iPhone Case - Loki",
-                    "iPhone Case - Love Nature Food",
-                    ]
-
-
-def load_product_ids():
-    try:
-        with open("shopify_products_idList.json", "r") as file:
-            data = json.load(file)
-    except FileNotFoundError:
-        print("shopify_products_idList.json file not found.")
-        return 
-    global product_id_options
-    product_id_options = {}  # Initialize as an empty dictionary
-    
-    for product in data["products"]:
-        x = product['title'].split(" ")
-        title = "".join(x).lower()
-        product_id = product['id']
-        product_id_options[title] = product_id  # Add key-value pair to dictionary
-            
-    
-def get_product_id(product_title, product_id_options):
-    return product_id_options.get(product_title, None)
-
-
-def select_directory():
-    directory = filedialog.askdirectory()
-    if directory:
-        directory_entry.delete(0, tk.END)
-        directory_entry.insert(0, directory)
-    else:
-        directory_entry.insert(0, "img")
+class PrintifyShopifyAutomation:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Printify to Shopify Automation")
+        self.selected_products = set()
+        self.product_id_options = {}
+        self.search_options = []
+        self.containProductId = None
         
-def run_printify_data_download(search_product_num):
-    global containProductId
-    
-    
-    
-    directory = directory_entry.get()
-    if directory == "":
-        directory = "img"
-    # search_product_num = search_var.get()
-    print("in printify data download : "+search_product_num)
-    x = search_product_num.split(", ")[0].split(" ")
-    product_title = "".join(x).lower()
-    print("in printify down prod title : "+product_title)
-    
-    containProductId = get_product_id(product_title, product_id_options)
-    if not containProductId:
-        print("you need to manually put product id for uploading")
-    
-    product_num = search_product_num.split(", ")[1]
-    # product_num = search_product_num
-    subprocess.run(["python", "printify_data_download.py"])
-    subprocess.run(["python", "image_download.py", directory, product_num])
+        # Set up fonts and styles
+        self.custom_font = tkfont.Font(family="Arial", size=10)
+        self.style = ttk.Style()
+        self.style.configure("TCheckbutton", background="#f0f0f0")
+        self.style.configure("TFrame", background="#f0f0f0")
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        # Create main frames
+        self.left_frame = self.create_frame()
+        self.center_frame = self.create_frame()
+        self.right_frame = self.create_frame()
+        
+        # Set up the UI components
+        self.setup_left_frame()
+        self.setup_center_frame()
+        self.setup_right_frame()
+        
+        # Initialize data
+        self.load_product_ids()
+        self.populate_search_options()
 
-def run_shopify_data_upload():
-    global containProductId
-    
-    directory = directory_entry.get()
-    if directory == "":
-        directory = "img"
+    def create_frame(self):
+        frame = tk.Frame(self.root, bg="#f0f0f0")
+        frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
+        return frame
+
+    def setup_left_frame(self):
+        # Download section
+        tk.Label(self.left_frame, text="Download", font=("Arial", 18, "bold"), 
+                bg="#f0f0f0").pack(pady=15)
         
-    if containProductId:
-        product_info = str(containProductId)
-        product_id = re.findall(r'\d+', product_info)[0]
+        # Directory selection
+        self.directory_frame = tk.Frame(self.left_frame, bg="#f0f0f0")
+        self.directory_frame.pack(anchor=tk.W, pady=10)
         
-        subprocess.run(["python", "shopify_variant_download.py", directory,product_id])
-        subprocess.run(["python", "image_upload.py", directory, product_id])
+        self.directory_entry = tk.Entry(self.directory_frame, width=25, font=self.custom_font)
+        self.directory_entry.insert(0, "img")
+        self.directory_entry.pack(side=tk.LEFT, padx=5)
         
-    elif search_dropdown.get() != "Enter product name...":
-        # Get the product title from dropdown and find its ID
-        selected_product = search_dropdown.get()
-        x = selected_product.split(", ")[0].split(" ")
-        product_title = "".join(x).lower()
-        product_id = get_product_id(product_title, product_id_options)
+        tk.Button(self.directory_frame, text="Select Directory", 
+                 command=self.select_directory, font=self.custom_font,
+                 bg="#007bff", fg="white").pack(side=tk.LEFT, padx=5)
         
-        if product_id:
-            subprocess.run(["python", "shopify_variant_download.py", directory, str(product_id)])
-            subprocess.run(["python", "image_upload.py", directory, str(product_id)])
+        # Products selection
+        self.products_frame = tk.Frame(self.left_frame, bg="#f0f0f0")
+        self.products_frame.pack(fill="both", expand=True, pady=10)
+        
+        tk.Label(self.products_frame, text="Select Products:", 
+                font=self.custom_font, bg="#f0f0f0").pack(anchor="w", padx=5)
+
+    def setup_center_frame(self):
+        # Essential Data section
+        tk.Label(self.center_frame, text="Essential Data", 
+                font=("Arial", 18, "bold"), bg="#f0f0f0").pack(pady=15)
+        
+        tk.Button(self.center_frame, text="Download Essential Data",
+                 command=self.download_essential_data,
+                 font=self.custom_font, bg="#007bff", fg="white").pack(pady=10)
+        
+        tk.Button(self.center_frame, text="Download + Upload",
+                 command=self.download_and_upload,
+                 font=self.custom_font, bg="#28a745", fg="white").pack(pady=10)
+
+    def setup_right_frame(self):
+        # Upload section
+        tk.Label(self.right_frame, text="Upload", 
+                font=("Arial", 18, "bold"), bg="#f0f0f0").pack(pady=15)
+        
+        # Add product ID label
+        tk.Label(self.right_frame, text="Product id. :", 
+                font=self.custom_font, bg="#f0f0f0").pack(anchor=tk.W, pady=5)
+        
+        # Add search dropdown
+        self.search_var = tk.StringVar()
+        self.search_dropdown = ttk.Combobox(
+            self.right_frame, 
+            textvariable=self.search_var, 
+            width=35, 
+            font=self.custom_font
+        )
+        self.search_dropdown.pack(anchor=tk.W, pady=5)
+        self.search_dropdown.insert(0, "Enter product name...")
+        self.search_dropdown.config(state="readonly")
+        
+        # Product ID entry
+        self.product_id_entry = tk.Entry(self.right_frame, width=35, font=self.custom_font)
+        self.product_id_entry.pack(anchor=tk.W, pady=5)
+        
+        # Upload button
+        tk.Button(self.right_frame, 
+                 text="Run Shopify Data Upload",
+                 command=self.upload_selected,
+                 font=self.custom_font, 
+                 bg="#007bff", 
+                 fg="white", 
+                 padx=10, 
+                 pady=5).pack(pady=10)
+
+    def select_directory(self):
+        directory = filedialog.askdirectory()
+        if directory:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            self.directory_entry.delete(0, tk.END)
+            self.directory_entry.insert(0, directory)
+
+    def on_checkbox_toggle(self, product_name, var):
+        if var.get():
+            self.selected_products.add(product_name)
         else:
-            print("Could not find product ID for the selected product")
+            self.selected_products.discard(product_name)
+        print(f"Selected products: {self.selected_products}")
+
+    def populate_search_options(self):
+        try:
+            with open("printify_product_data.json", "r") as file:
+                data = json.load(file)
+        except FileNotFoundError:
+            print("printify_product_data.json not found. Please download essential data first.")
+            return
+
+        # Clear existing checkboxes
+        for widget in self.products_frame.winfo_children()[1:]:  # Skip the label
+            widget.destroy()
+
+        # Create scrollable frame
+        canvas = tk.Canvas(self.products_frame, bg="#f0f0f0")
+        scrollbar = ttk.Scrollbar(self.products_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Add checkboxes
+        self.checkbox_vars = {}  # Store checkbox variables
+        for num, product in enumerate(data['data']):
+            var = tk.BooleanVar()
+            self.checkbox_vars[product['title']] = var
             
-    elif product_id_entry.get().strip():  # Check if manual product ID is entered
-        product_id = product_id_entry.get()
+            checkbox = ttk.Checkbutton(
+                scrollable_frame,
+                text=product['title'],
+                variable=var,
+                command=lambda p=product['title'], v=var: self.on_checkbox_toggle(p, v)
+            )
+            checkbox.pack(anchor="w", padx=5, pady=2)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Update scroll region
+        scrollable_frame.bind("<Configure>", 
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    def download_essential_data(self):
+        subprocess.run(["python", "printify_data_download.py"])
+        subprocess.run(["python", "shopify_products.py"])
+        self.load_product_ids()
+        self.populate_search_options()
+
+    def download_and_upload(self):
+        if not self.selected_products:
+            print("No products selected")
+            return
+
+        directory = self.directory_entry.get()
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        for product in self.selected_products:
+            try:
+                self.download_product(product)
+                self.upload_product(product)
+            except Exception as e:
+                print(f"Error processing {product}: {str(e)}")
+
+    def download_product(self, product_title):
+        try:
+            with open("printify_product_data.json", "r") as file:
+                data = json.load(file)
+            
+            for num, prod in enumerate(data['data']):
+                if prod['title'] == product_title:
+                    subprocess.run(["python", "printify_data_download.py"])
+                    subprocess.run(["python", "image_download.py", 
+                                  self.directory_entry.get(), str(num)])
+                    break
+        except Exception as e:
+            print(f"Download error for {product_title}: {str(e)}")
+            raise
+
+    def upload_product(self, product_title):
+        try:
+            x = product_title.split(" ")
+            title = "".join(x).lower()
+            product_id = self.product_id_options.get(title)
+            
+            if product_id:
+                directory = self.directory_entry.get()
+                subprocess.run(["python", "shopify_variant_download.py", directory, str(product_id)])
+                subprocess.run(["python", "image_upload.py", directory, str(product_id)])
+            else:
+                print(f"No product ID found for {product_title}")
+        except Exception as e:
+            print(f"Upload error for {product_title}: {str(e)}")
+            raise
+
+    def load_product_ids(self):
+        try:
+            with open("shopify_products_idList.json", "r") as file:
+                data = json.load(file)
+            
+            self.product_id_options = {
+                "".join(product['title'].split(" ")).lower(): product['id']
+                for product in data["products"]
+            }
+        except FileNotFoundError:
+            print("shopify_products_idList.json not found")
+
+    def upload_selected(self):
+        """Handle the upload of selected products"""
+        directory = self.directory_entry.get()
+        if not os.path.exists(directory):
+            os.makedirs(directory)
         
-        subprocess.run(["python", "shopify_variant_download.py", directory,product_id])
-        subprocess.run(["python", "image_upload.py", directory, product_id])
-    else:
-        print("Please either select a product from dropdown or enter a product ID manually")
+        if self.search_dropdown.get() != "Enter product name...":
+            # Get the product title from dropdown and find its ID
+            selected_product = self.search_dropdown.get()
+            x = selected_product.split(", ")[0].split(" ")
+            product_title = "".join(x).lower()
+            product_id = self.product_id_options.get(product_title)
+            
+            if product_id:
+                subprocess.run(["python", "shopify_variant_download.py", directory, str(product_id)])
+                subprocess.run(["python", "image_upload.py", directory, str(product_id)])
+            else:
+                print("Could not find product ID for the selected product")
+            
+        elif self.product_id_entry.get().strip():  # Check if manual product ID is entered
+            product_id = self.product_id_entry.get()
+            subprocess.run(["python", "shopify_variant_download.py", directory, product_id])
+            subprocess.run(["python", "image_upload.py", directory, product_id])
+        else:
+            print("Please either select a product from dropdown or enter a product ID manually")
 
+    def run(self):
+        self.root.mainloop()
 
-def download_and_upload():
-    # Implement the logic to download and upload data
-    try:
-        with open("printify_product_data.json", "r") as file:
-            data = json.load(file)
-    except FileNotFoundError:
-        print("printify_product_data.json file not found.")
-        return
-    
-    for product in productArrayWant: 
-        for num in range(len(data['data'])):
-            if(product == data['data'][num]['title']):
-                titleProduct = f"{data['data'][num]['title']}, {num}"
-                run_printify_data_download(titleProduct)
-                run_shopify_data_upload()
-                
-def download_essential_data_for_searchField():
-    subprocess.run(["python", "printify_data_download.py"])
-    subprocess.run(["python", "shopify_products.py"])
-    
-    refresh_search()
-
-def refresh_search():
-    populate_search_options()
-    load_product_ids()
-    search_dropdown.delete(0, tk.END)
-    
-
-def populate_search_options():
-    try:
-        with open("printify_product_data.json", "r") as file:
-            data = json.load(file)
-    except FileNotFoundError:
-        print("printify_product_data.json file not found.")
-        return
-    
-    global search_options
-    search_options = []
-    for num in range(len(data['data'])):
-        search_options.append(f"{data['data'][num]['title']}, {num}")
-    
-    search_dropdown.configure(values=search_options)
-
-root = tk.Tk()
-root.title("Printify to Shopify Automation")
-
-# Set a custom font for the application
-custom_font = tkfont.Font(family="Arial", size=10)
-
-# Main Frames
-left_frame = tk.Frame(root, bg="#f0f0f0")
-left_frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
-
-center_frame = tk.Frame(root, bg="#f0f0f0")
-center_frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
-
-right_frame = tk.Frame(root, bg="#f0f0f0")
-right_frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
-
-# Left Frame - Downloading
-download_label = tk.Label(left_frame, text="Download", font=("Arial", 18, "bold"), bg="#f0f0f0")
-download_label.pack(pady=15)
-
-search_label = tk.Label(left_frame, text="Product Name:", font=custom_font, bg="#f0f0f0")
-search_label.pack(anchor=tk.W, pady=5)
-
-search_var = tk.StringVar()
-search_dropdown = ttk.Combobox(left_frame, textvariable=search_var, width=35, font=custom_font)
-search_dropdown.pack(anchor=tk.W, pady=5)
-
-search_dropdown.insert(0, "Enter product name...")
-search_dropdown.config(state="readonly")
-
-directory_frame = tk.Frame(left_frame, bg="#f0f0f0")
-directory_frame.pack(anchor=tk.W, pady=10)
-
-directory_label = tk.Label(directory_frame, text="Select Directory:", font=custom_font, bg="#f0f0f0")
-directory_label.pack(side=tk.TOP, padx=5)
-
-directory_entry = tk.Entry(directory_frame, width=25, font=custom_font)
-directory_entry.pack(side=tk.LEFT, padx=5)
-
-select_directory_button = tk.Button(directory_frame, text="Select", command=select_directory, font=custom_font, bg="#007bff", fg="white", padx=10, pady=5)
-select_directory_button.pack(side=tk.LEFT, padx=5)
-
-run_printify_data_button = tk.Button(
-    left_frame, 
-    text="Run Printify Data Download", 
-    command=lambda: run_printify_data_download(search_dropdown.get()) if search_dropdown.get() != "Enter product name..." else print("Please select a product first"),
-    font=custom_font, 
-    bg="#28a745", 
-    fg="white", 
-    padx=10, 
-    pady=5
-)
-run_printify_data_button.pack(anchor=tk.W, pady=10)
-
-# Center Frame - Essential Data
-essential_data_label = tk.Label(center_frame, text="Essential Data", font=("Arial", 18, "bold"), bg="#f0f0f0")
-essential_data_label.pack(pady=15)
-
-essential_data_for_searchField_button = tk.Button(center_frame, text="Download Essential Data", command=download_essential_data_for_searchField, font=custom_font, bg="#007bff", fg="white", padx=10, pady=5)
-essential_data_for_searchField_button.pack(pady=10)
-
-refresh_button = tk.Button(center_frame, text="Refresh", command=refresh_search, font=custom_font, bg="#6c757d", fg="white", padx=10, pady=5)
-refresh_button.pack(pady=10)
-
-download_upload_button = tk.Button(center_frame, text="Download + Upload", command=download_and_upload, font=custom_font, bg="#28a745", fg="white", padx=10, pady=5)
-download_upload_button.pack(pady=10)
-
-# Right Frame - Uploading
-upload_label = tk.Label(right_frame, text="Upload", font=("Arial", 18, "bold"), bg="#f0f0f0")
-upload_label.pack(pady=15)
-
-product_id_label = tk.Label(right_frame, text="Product id. :", font=custom_font, bg="#f0f0f0")
-product_id_label.pack(anchor=tk.W, pady=5)
-
-product_id_entry = tk.Entry(right_frame,  width=35, font=custom_font)
-product_id_entry.pack(anchor=tk.W, pady=5)
-
-
-run_shopify_data_button = tk.Button(right_frame, text="Run Shopify Data Upload", command=run_shopify_data_upload, font=custom_font, bg="#007bff", fg="white", padx=10, pady=5)
-run_shopify_data_button.pack(pady=10)
-
-# Call functions to populate options
-populate_search_options()
-load_product_ids()
-
-
-
-root.mainloop()
+if __name__ == "__main__":
+    app = PrintifyShopifyAutomation()
+    app.run()
