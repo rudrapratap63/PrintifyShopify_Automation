@@ -203,7 +203,16 @@ directory_entry.pack(side=tk.LEFT, padx=5)
 select_directory_button = tk.Button(directory_frame, text="Select", command=select_directory, font=custom_font, bg="#007bff", fg="white", padx=10, pady=5)
 select_directory_button.pack(side=tk.LEFT, padx=5)
 
-run_printify_data_button = tk.Button(left_frame, text="Run Printify Data Download", command=run_printify_data_download, font=custom_font, bg="#28a745", fg="white", padx=10, pady=5)
+run_printify_data_button = tk.Button(
+    left_frame, 
+    text="Run Printify Data Download", 
+    command=lambda: run_printify_data_download(search_dropdown.get()) if search_dropdown.get() != "Enter product name..." else print("Please select a product first"),
+    font=custom_font, 
+    bg="#28a745", 
+    fg="white", 
+    padx=10, 
+    pady=5
+)
 run_printify_data_button.pack(anchor=tk.W, pady=10)
 
 # Center Frame - Essential Data
