@@ -35,6 +35,8 @@ with open('./product_variants.json', 'r') as file:
 # Add failed uploads tracking
 failed_uploads = []
 failed_uploads_lock = threading.Lock()
+processed_product_ids = set()
+processed_product_ids_lock = threading.Lock()
 
 def extract_sku(file_name):
     pattern = r'__(\d+)__'
@@ -104,6 +106,8 @@ def process_file(file_name, file_path):
                 update_response.raise_for_status()
                 if update_response.status_code == 200:
                     count+=1
+                    with processed_product_ids_lock:
+                        processed_product_ids.add(product_id)
                     print(f"Image updated successfully. Count: {count}")
                 elif update_response.status_code == 409:
                     print("Error updating image:", update_response.status_code, update_response.text)
@@ -181,4 +185,5 @@ if __name__ == "__main__":
 
     print("All files processed.")
     print(f"Total Image Uploaded is {count}")
+    print(f"Product IDs processed: {processed_product_ids}")
     
