@@ -78,6 +78,11 @@ class PrintifyShopifyAutomation:
         tk.Button(self.center_frame, text="Download + Upload",
                  command=self.download_and_upload,
                  font=self.custom_font, bg="#28a745", fg="white").pack(pady=10)
+        
+        # Add button to get product image count
+        tk.Button(self.center_frame, text="Get Product Image Count",
+                 command=self.get_product_image_count,
+                 font=self.custom_font, bg="#17a2b8", fg="white").pack(pady=10)
 
     def setup_right_frame(self):
         # Upload section
@@ -133,6 +138,20 @@ class PrintifyShopifyAutomation:
         try:
             with open("printify_product_data.json", "r") as file:
                 data = json.load(file)
+            
+            # Load image counts from product_image_counts.json
+            try:
+                with open("product_image_counts.json", "r") as count_file:
+                    image_counts = json.load(count_file)
+                    # Create a dictionary for quick lookup
+                    image_count_dict = {
+                        product["title"]: product["image_count"] 
+                        for product in image_counts["products"]
+                    }
+            except FileNotFoundError:
+                print("product_image_counts.json not found")
+                image_count_dict = {}
+            
         except FileNotFoundError:
             print("printify_product_data.json not found. Please download essential data first.")
             return
@@ -155,9 +174,13 @@ class PrintifyShopifyAutomation:
             var = tk.BooleanVar()
             self.checkbox_vars[product['title']] = var
             
+            # Get image count for this product
+            image_count = image_count_dict.get(product['title'], 0)
+            
+            # Create checkbox with image count
             checkbox = ttk.Checkbutton(
                 scrollable_frame,
-                text=product['title'],
+                text=f"{product['title']} | (total images: {image_count})",
                 variable=var,
                 command=lambda p=product['title'], v=var: self.on_checkbox_toggle(p, v)
             )
@@ -260,6 +283,17 @@ class PrintifyShopifyAutomation:
             subprocess.run(["python", "image_upload.py", directory, product_id])
         else:
             print("Please either select a product from dropdown or enter a product ID manually")
+
+    def get_product_image_count(self):
+        """Run the script to get product image counts and refresh the checkboxes"""
+        try:
+            # Run the script to get product image counts
+            subprocess.run(["python", "get_product_images_count.py"])
+            
+            # Refresh the checkboxes with updated image counts
+            self.populate_search_options()
+        except Exception as e:
+            print(f"Error running get_product_images_count.py: {str(e)}")
 
     def run(self):
         self.root.mainloop()
